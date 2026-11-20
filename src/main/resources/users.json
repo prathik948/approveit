@@ -1,0 +1,76 @@
+{
+  "users": [
+    {
+      "id": "M1",
+      "name": "Asha Rao",
+      "roles": [
+        "Maker"
+      ]
+    },
+    {
+      "id": "M2",
+      "name": "Ravi Kamath",
+      "roles": [
+        "Maker"
+      ]
+    },
+    {
+      "id": "M3",
+      "name": "Farhan Sheikh",
+      "roles": [
+        "Maker"
+      ]
+    },
+    {
+      "id": "MC1",
+      "name": "Deepa Nayak",
+      "roles": [
+        "Maker",
+        "Checker"
+      ]
+    },
+    {
+      "id": "MC2",
+      "name": "Kiran Bhat",
+      "roles": [
+        "Maker",
+        "Checker"
+      ]
+    },
+    {
+      "id": "C1",
+      "name": "Suresh Pai",
+      "roles": [
+        "Checker"
+      ]
+    },
+    {
+      "id": "C2",
+      "name": "Meera Hegde",
+      "roles": [
+        "Checker"
+      ]
+    },
+    {
+      "id": "C3",
+      "name": "Arjun Shenoy",
+      "roles": [
+        "Checker"
+      ]
+    },
+    {
+      "id": "A1",
+      "name": "Priya Kini",
+      "roles": [
+        "Admin"
+      ]
+    },
+    {
+      "id": "A2",
+      "name": "Naveen Acharya",
+      "roles": [
+        "Admin"
+      ]
+    }
+  ]
+}
