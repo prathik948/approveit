@@ -54,6 +54,19 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getPaymentById(id));
     }
 
+    @PutMapping("/{id}/submit")
+    public ResponseEntity<PaymentResponse> submitPayment(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Id") String userId) {
+
+        PaymentResponse submittedPayment =
+                paymentService.submitPayment(id, userId);
+
+        return ResponseEntity.ok(submittedPayment);
+    }
+
+
+
 
 
 }

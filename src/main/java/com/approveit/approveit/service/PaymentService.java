@@ -132,6 +132,104 @@ public class PaymentService {
     }
 
 
+    //Submit
+    @Transactional
+    public PaymentResponse submitPayment(Long paymentId, String userId) {
+
+        Payment payment = null;
+        String stateBefore = null;
+
+        try {
+
+            // Find payment
+            payment = paymentRepository.findById(paymentId)
+                    .orElseThrow(() ->
+                            new BusinessException("Payment not found"));
+
+            stateBefore = payment.getStatus().name();
+
+            // Find user
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() ->
+                            new BusinessException("User not found"));
+
+            // Check Maker role
+            if (!user.getRoles().contains(Role.MAKER)) {
+                throw new BusinessException("Only a Maker can submit payments");
+            }
+
+            // Check original Maker
+            if (!payment.getMaker().getUserId().equals(userId)) {
+                throw new BusinessException(
+                        "Only the original Maker can submit this payment");
+            }
+
+            // Check payment status
+            if (payment.getStatus() != PaymentStatus.DRAFT) {
+                throw new BusinessException(
+                        "Only DRAFT payments can be submitted");
+            }
+
+            // Get today's date using the injectable business clock
+            ZoneId ist = ZoneId.of("Asia/Kolkata");
+            LocalDate today = LocalDate.now(businessClock);
+
+            Instant startOfDay = today.atStartOfDay(ist).toInstant();
+            Instant startOfNextDay = today.plusDays(1)
+                    .atStartOfDay(ist).toInstant();
+
+            // Get already submitted amount for today
+            BigDecimal alreadySubmitted =
+                    paymentRepository.getDailySubmittedAmount(
+                            userId, startOfDay, startOfNextDay);
+
+            // Daily limit: 50 lakh
+            BigDecimal dailyLimit = new BigDecimal("5000000.00");
+
+            BigDecimal newTotal = alreadySubmitted.add(payment.getAmount());
+
+            if (newTotal.compareTo(dailyLimit) > 0) {
+                throw new BusinessException(
+                        "Daily submission limit of Rs. 50,00,000 exceeded");
+            }
+
+            // Submit payment
+            payment.setStatus(PaymentStatus.SUBMITTED);
+            payment.setSubmittedAt(Instant.now(businessClock));
+
+            Payment submittedPayment = paymentRepository.save(payment);
+
+            // Record successful submission
+            auditLogService.logAction(
+                    userId,
+                    submittedPayment,
+                    "SUBMIT_PAYMENT",
+                    stateBefore,
+                    submittedPayment.getStatus().name(),
+                    "SUCCESS",
+                    "Payment submitted successfully"
+            );
+
+            return new PaymentResponse(submittedPayment);
+
+        } catch (BusinessException ex) {
+
+            // Record failed submission
+            auditLogService.logAction(
+                    userId,
+                    payment != null ? payment.getId() : paymentId,
+                    "SUBMIT_PAYMENT",
+                    stateBefore,
+                    stateBefore,
+                    "FAILURE",
+                    ex.getMessage()
+            );
+
+            throw ex;
+        }
+    }
+
+
 
 }
 

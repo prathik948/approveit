@@ -83,4 +83,77 @@ class PaymentServiceTest {
         );
     }
 
+    @Test
+    void makerCannotExceedDailySubmissionLimit() {
+
+        CreatePaymentRequest firstRequest = new CreatePaymentRequest();
+
+        firstRequest.setBeneficiaryName("Beneficiary One");
+        firstRequest.setBeneficiaryId("TEST010");
+        firstRequest.setAmount(new BigDecimal("3000000.00"));
+        firstRequest.setPurpose("First daily payment");
+
+        Payment firstPayment =
+                paymentService.createPayment("M1", firstRequest);
+
+        paymentService.submitPayment(firstPayment.getId(), "M1");
+
+
+        CreatePaymentRequest secondRequest = new CreatePaymentRequest();
+
+        secondRequest.setBeneficiaryName("Beneficiary Two");
+        secondRequest.setBeneficiaryId("TEST011");
+        secondRequest.setAmount(new BigDecimal("2500000.00"));
+        secondRequest.setPurpose("Second daily payment");
+
+        Payment secondPayment =
+                paymentService.createPayment("M1", secondRequest);
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.submitPayment(secondPayment.getId(), "M1")
+        );
+    }
+
+    @Test
+    void makerCannotSubmitAnotherMakersPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST080");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Unauthorized submission test");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.submitPayment(
+                        payment.getId(), "M2"
+                )
+        );
+    }
+
+    @Test
+    void makerCannotSubmitPaymentTwice() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST160");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Duplicate submission test");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.submitPayment(
+                        payment.getId(), "M1"
+                )
+        );
+    }
 }
