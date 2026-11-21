@@ -230,6 +230,113 @@ public class PaymentService {
     }
 
 
+    //Approve
+    @Transactional
+    public PaymentResponse approvePayment(Long paymentId, String userId) {
+
+        Payment payment = null;
+        String stateBefore = null;
+
+        try {
+
+            // Find and lock payment
+            payment = paymentRepository.findByIdForUpdate(paymentId)
+                    .orElseThrow(() ->
+                            new BusinessException("Payment not found"));
+
+            stateBefore = payment.getStatus().name();
+
+            // Find Checker
+            User checker = userRepository.findById(userId)
+                    .orElseThrow(() ->
+                            new BusinessException("User not found"));
+
+            // Check Checker role
+            if (!checker.getRoles().contains(Role.CHECKER)) {
+                throw new BusinessException(
+                        "Only a Checker can approve payments");
+            }
+
+            // Prevent self-approval
+            if (payment.getMaker().getUserId().equals(userId)) {
+                throw new BusinessException(
+                        "Maker cannot approve their own payment");
+            }
+
+            // Check payment status
+            if (payment.getStatus() != PaymentStatus.SUBMITTED) {
+                throw new BusinessException(
+                        "Only SUBMITTED payments can be approved");
+            }
+
+            // Check duplicate approval
+            boolean alreadyApproved =
+                    approvalRepository.existsByPayment_IdAndChecker_UserId(
+                            paymentId, userId);
+
+            if (alreadyApproved) {
+                throw new BusinessException(
+                        "This Checker has already approved this payment");
+            }
+
+            // Save approval
+            Approval approval = new Approval();
+            approval.setPayment(payment);
+            approval.setChecker(checker);
+            approval.setDecision(ApprovalDecision.APPROVED);
+
+            approvalRepository.save(approval);
+
+            // Determine required approvals
+            BigDecimal approvalLimit = new BigDecimal("1000000.00");
+
+            long requiredApprovals =
+                    payment.getAmount().compareTo(approvalLimit) > 0 ? 2 : 1;
+
+            // Count existing approvals
+            long totalApprovals =
+                    approvalRepository.countByPayment_IdAndDecision(
+                            paymentId, ApprovalDecision.APPROVED);
+
+            // Update status when approval threshold is reached
+            if (totalApprovals >= requiredApprovals) {
+                payment.setStatus(PaymentStatus.APPROVED);
+            }
+
+            // Save updated payment
+            Payment approvedPayment = paymentRepository.save(payment);
+
+            // Record successful approval
+            auditLogService.logAction(
+                    userId,
+                    approvedPayment,
+                    "APPROVE_PAYMENT",
+                    stateBefore,
+                    approvedPayment.getStatus().name(),
+                    "SUCCESS",
+                    "Payment approval recorded successfully"
+            );
+
+            return new PaymentResponse(approvedPayment);
+
+        } catch (BusinessException ex) {
+
+            // Record failed approval
+            auditLogService.logAction(
+                    userId,
+                    payment != null ? payment.getId() : paymentId,
+                    "APPROVE_PAYMENT",
+                    stateBefore,
+                    stateBefore,
+                    "FAILURE",
+                    ex.getMessage()
+            );
+
+            throw ex;
+        }
+    }
+
+
 
 }
 

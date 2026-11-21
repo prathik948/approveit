@@ -84,6 +84,111 @@ class PaymentServiceTest {
     }
 
     @Test
+    void makerCannotApproveOwnPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST003");
+        request.setAmount(new BigDecimal("25000.00"));
+        request.setPurpose("Self approval test");
+
+        Payment payment = paymentService.createPayment("MC1", request);
+
+        Long paymentId = payment.getId();
+
+        paymentService.submitPayment(paymentId, "MC1");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.approvePayment(paymentId, "MC1")
+        );
+    }
+
+    @Test
+    void oneCheckerCanApprovePaymentBelowTenLakhs() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST004");
+        request.setAmount(new BigDecimal("25000.00"));
+        request.setPurpose("Approval threshold test");
+
+        Payment payment = paymentService.createPayment("M2", request);
+
+        Long paymentId = payment.getId();
+
+        paymentService.submitPayment(paymentId, "M2");
+
+        paymentService.approvePayment(paymentId, "C1");
+
+        PaymentResponse approvedPayment = paymentService.getPaymentById(paymentId);
+
+        assertEquals(PaymentStatus.APPROVED, approvedPayment.getStatus());
+    }
+
+
+    @Test
+    void paymentAboveTenLakhsRequiresTwoCheckers() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST005");
+        request.setAmount(new BigDecimal("1500000.00"));
+        request.setPurpose("Two checker approval test");
+
+        Payment payment = paymentService.createPayment("M2", request);
+
+        Long paymentId = payment.getId();
+
+        paymentService.submitPayment(paymentId, "M2");
+
+        // First checker approves
+        paymentService.approvePayment(paymentId, "C1");
+
+        PaymentResponse afterFirstApproval =
+                paymentService.getPaymentById(paymentId);
+
+        assertEquals(PaymentStatus.SUBMITTED, afterFirstApproval.getStatus());
+
+        // Second checker approves
+        paymentService.approvePayment(paymentId, "C2");
+
+        PaymentResponse afterSecondApproval =
+                paymentService.getPaymentById(paymentId);
+
+        assertEquals(PaymentStatus.APPROVED, afterSecondApproval.getStatus());
+    }
+
+    @Test
+    void sameCheckerCannotApproveTwice() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST006");
+        request.setAmount(new BigDecimal("1500000.00"));
+        request.setPurpose("Duplicate approval test");
+
+        Payment payment = paymentService.createPayment("M2", request);
+
+        Long paymentId = payment.getId();
+
+        paymentService.submitPayment(paymentId, "M2");
+
+        // First approval by C1
+        paymentService.approvePayment(paymentId, "C1");
+
+        // Same Checker tries to approve again
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.approvePayment(paymentId, "C1")
+        );
+    }
+
+    @Test
     void makerCannotExceedDailySubmissionLimit() {
 
         CreatePaymentRequest firstRequest = new CreatePaymentRequest();
@@ -135,6 +240,49 @@ class PaymentServiceTest {
         );
     }
 
+    @Test
+    void makerWithoutCheckerRoleCannotApprovePayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST090");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Role validation test");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.approvePayment(
+                        payment.getId(), "M2"
+                )
+        );
+    }
+
+    @Test
+    void adminCannotApprovePayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST100");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Admin approval validation");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.approvePayment(
+                        payment.getId(), "A1"
+                )
+        );
+    }
     @Test
     void makerCannotSubmitPaymentTwice() {
 

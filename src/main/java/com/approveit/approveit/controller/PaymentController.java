@@ -67,6 +67,19 @@ public class PaymentController {
 
 
 
+    @PutMapping("/{id}/approve")
+    public ResponseEntity<PaymentResponse> approvePayment(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Id") String userId) {
+
+        PaymentResponse approvedPayment =
+                paymentService.approvePayment(id, userId);
+
+        return ResponseEntity.ok(approvedPayment);
+    }
+
+
+
 
 
 }
