@@ -80,6 +80,20 @@ public class PaymentController {
 
 
 
+    @PutMapping("/{id}/reject")
+    public ResponseEntity<PaymentResponse> rejectPayment(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Id") String userId,
+            @Valid @RequestBody RejectPaymentRequest request) {
+
+        PaymentResponse rejectedPayment =
+                paymentService.rejectPayment(id, userId, request);
+
+        return ResponseEntity.ok(rejectedPayment);
+    }
+
+
+
 
 
 }

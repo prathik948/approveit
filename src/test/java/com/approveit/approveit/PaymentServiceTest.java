@@ -189,6 +189,33 @@ class PaymentServiceTest {
     }
 
     @Test
+    void checkerCanRejectPaymentWithReason() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST007");
+        request.setAmount(new BigDecimal("50000.00"));
+        request.setPurpose("Rejection test");
+
+        Payment payment = paymentService.createPayment("M2", request);
+
+        Long paymentId = payment.getId();
+
+        paymentService.submitPayment(paymentId, "M2");
+
+        RejectPaymentRequest rejectRequest = new RejectPaymentRequest();
+        rejectRequest.setReason("Incorrect beneficiary details");
+
+        paymentService.rejectPayment(paymentId, "C1", rejectRequest);
+
+        PaymentResponse rejectedPayment =
+                paymentService.getPaymentById(paymentId);
+
+        assertEquals(PaymentStatus.REJECTED, rejectedPayment.getStatus());
+    }
+
+    @Test
     void makerCannotExceedDailySubmissionLimit() {
 
         CreatePaymentRequest firstRequest = new CreatePaymentRequest();
@@ -217,6 +244,68 @@ class PaymentServiceTest {
         assertThrows(
                 BusinessException.class,
                 () -> paymentService.submitPayment(secondPayment.getId(), "M1")
+        );
+    }
+
+    @Test
+    void rejectedPaymentDoesNotCountTowardDailyLimit() {
+
+        CreatePaymentRequest firstRequest = new CreatePaymentRequest();
+        firstRequest.setBeneficiaryName("Beneficiary One");
+        firstRequest.setBeneficiaryId("TEST020");
+        firstRequest.setAmount(new BigDecimal("3000000.00"));
+        firstRequest.setPurpose("First payment");
+
+        Payment firstPayment =
+                paymentService.createPayment("M1", firstRequest);
+
+        paymentService.submitPayment(firstPayment.getId(), "M1");
+
+        RejectPaymentRequest rejectRequest = new RejectPaymentRequest();
+        rejectRequest.setReason("Incorrect beneficiary details");
+
+        paymentService.rejectPayment(
+                firstPayment.getId(), "C1", rejectRequest
+        );
+
+        CreatePaymentRequest secondRequest = new CreatePaymentRequest();
+        secondRequest.setBeneficiaryName("Beneficiary Two");
+        secondRequest.setBeneficiaryId("TEST021");
+        secondRequest.setAmount(new BigDecimal("3000000.00"));
+        secondRequest.setPurpose("Second payment");
+
+        Payment secondPayment =
+                paymentService.createPayment("M1", secondRequest);
+
+        PaymentResponse response =
+                paymentService.submitPayment(secondPayment.getId(), "M1");
+
+        assertEquals(PaymentStatus.SUBMITTED, response.getStatus());
+    }
+
+
+    @Test
+    void makerCheckerCannotRejectOwnPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST060");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Self rejection test");
+
+        Payment payment =
+                paymentService.createPayment("MC1", request);
+
+        paymentService.submitPayment(payment.getId(), "MC1");
+
+        RejectPaymentRequest rejectRequest = new RejectPaymentRequest();
+        rejectRequest.setReason("Testing self rejection");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.rejectPayment(
+                        payment.getId(), "MC1", rejectRequest
+                )
         );
     }
 
@@ -280,6 +369,59 @@ class PaymentServiceTest {
                 BusinessException.class,
                 () -> paymentService.approvePayment(
                         payment.getId(), "A1"
+                )
+        );
+    }
+    @Test
+    void checkerCannotRejectPaymentWithoutReason() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST110");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Rejection reason validation");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        RejectPaymentRequest rejectRequest = new RejectPaymentRequest();
+        rejectRequest.setReason(" ");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.rejectPayment(
+                        payment.getId(), "C1", rejectRequest
+                )
+        );
+    }
+
+    @Test
+    void checkerCannotApproveRejectedPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST120");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Rejected payment validation");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        RejectPaymentRequest rejectRequest = new RejectPaymentRequest();
+        rejectRequest.setReason("Invalid beneficiary details");
+
+        paymentService.rejectPayment(
+                payment.getId(), "C1", rejectRequest
+        );
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.approvePayment(
+                        payment.getId(), "C2"
                 )
         );
     }

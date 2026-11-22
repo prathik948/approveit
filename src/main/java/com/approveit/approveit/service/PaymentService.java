@@ -337,6 +337,103 @@ public class PaymentService {
     }
 
 
+    //Reject
+
+    @Transactional
+    public PaymentResponse rejectPayment(
+            Long paymentId,
+            String userId,
+            RejectPaymentRequest request) {
+
+        Payment payment = null;
+        String stateBefore = null;
+
+        try {
+            // Validate rejection reason
+            if (request == null
+                    || request.getReason() == null
+                    || request.getReason().isBlank()) {
+
+                throw new BusinessException(
+                        "Rejection reason is required");
+            }
+
+            // Find and lock payment
+            payment = paymentRepository.findByIdForUpdate(paymentId)
+                    .orElseThrow(() ->
+                            new BusinessException("Payment not found"));
+
+            stateBefore = payment.getStatus().name();
+
+            // Find Checker
+            User checker = userRepository.findById(userId)
+                    .orElseThrow(() ->
+                            new BusinessException("User not found"));
+
+            // Check Checker role
+            if (!checker.getRoles().contains(Role.CHECKER)) {
+                throw new BusinessException(
+                        "Only a Checker can reject payments");
+            }
+
+            // Prevent self-rejection
+            if (payment.getMaker().getUserId().equals(userId)) {
+                throw new BusinessException(
+                        "Maker cannot reject their own payment");
+            }
+
+            // Check payment status
+            if (payment.getStatus() != PaymentStatus.SUBMITTED) {
+                throw new BusinessException(
+                        "Only SUBMITTED payments can be rejected");
+            }
+
+            // Create rejection record
+            Approval rejection = new Approval();
+            rejection.setPayment(payment);
+            rejection.setChecker(checker);
+            rejection.setDecision(ApprovalDecision.REJECTED);
+            rejection.setReason(request.getReason());
+
+            approvalRepository.save(rejection);
+
+            // Update payment status
+            payment.setStatus(PaymentStatus.REJECTED);
+
+            Payment rejectedPayment = paymentRepository.save(payment);
+
+            // Record successful rejection
+            auditLogService.logAction(
+                    userId,
+                    rejectedPayment,
+                    "REJECT_PAYMENT",
+                    stateBefore,
+                    rejectedPayment.getStatus().name(),
+                    "SUCCESS",
+                    "Payment rejected. Reason: " + request.getReason()
+            );
+
+            return new PaymentResponse(rejectedPayment);
+
+        } catch (BusinessException ex) {
+
+            // Record failed rejection attempt
+            auditLogService.logAction(
+                    userId,
+                    payment != null ? payment.getId() : paymentId,
+                    "REJECT_PAYMENT",
+                    stateBefore,
+                    stateBefore,
+                    "FAILURE",
+                    ex.getMessage()
+            );
+
+            throw ex;
+        }
+    }
+
+
+
 
 }
 
