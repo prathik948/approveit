@@ -335,6 +335,105 @@ class PaymentServiceTest {
 
 
     @Test
+    void editingSubmittedPaymentResetsStatusAndClearsApprovals() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Original Beneficiary");
+        request.setBeneficiaryId("TEST030");
+        request.setAmount(new BigDecimal("1500000.00"));
+        request.setPurpose("Original purpose");
+
+        Payment payment =
+                paymentService.createPayment("M2", request);
+
+        paymentService.submitPayment(payment.getId(), "M2");
+
+        paymentService.approvePayment(payment.getId(), "C1");
+
+        CreatePaymentRequest updatedRequest = new CreatePaymentRequest();
+        updatedRequest.setBeneficiaryName("Updated Beneficiary");
+        updatedRequest.setBeneficiaryId("TEST031");
+        updatedRequest.setAmount(new BigDecimal("1600000.00"));
+        updatedRequest.setPurpose("Updated purpose");
+
+        PaymentResponse response =
+                paymentService.editPayment(
+                        payment.getId(), "M2", updatedRequest
+                );
+
+        assertEquals(PaymentStatus.DRAFT, response.getStatus());
+        assertEquals("Updated Beneficiary", response.getBeneficiaryName());
+        assertEquals(new BigDecimal("1600000.00"), response.getAmount());
+    }
+
+    @Test
+    void editingSubmittedPaymentDeletesPreviousApprovals() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST040");
+        request.setAmount(new BigDecimal("1500000.00"));
+        request.setPurpose("Approval deletion test");
+
+        Payment payment =
+                paymentService.createPayment("M2", request);
+
+        paymentService.submitPayment(payment.getId(), "M2");
+
+        paymentService.approvePayment(payment.getId(), "C1");
+
+        assertEquals(
+                1,
+                approvalRepository.countByPayment_IdAndDecision(
+                        payment.getId(), ApprovalDecision.APPROVED
+                )
+        );
+
+        CreatePaymentRequest updatedRequest = new CreatePaymentRequest();
+        updatedRequest.setBeneficiaryName("Updated Beneficiary");
+        updatedRequest.setBeneficiaryId("TEST041");
+        updatedRequest.setAmount(new BigDecimal("1600000.00"));
+        updatedRequest.setPurpose("Updated approval deletion test");
+
+        paymentService.editPayment(
+                payment.getId(), "M2", updatedRequest
+        );
+
+        assertEquals(
+                0,
+                approvalRepository.countByPayment_IdAndDecision(
+                        payment.getId(), ApprovalDecision.APPROVED
+                )
+        );
+    }
+
+    @Test
+    void makerCannotEditAnotherMakersPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST050");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Ownership test");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        CreatePaymentRequest updatedRequest = new CreatePaymentRequest();
+        updatedRequest.setBeneficiaryName("Changed Beneficiary");
+        updatedRequest.setBeneficiaryId("TEST051");
+        updatedRequest.setAmount(new BigDecimal("600000.00"));
+        updatedRequest.setPurpose("Unauthorized edit");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.editPayment(
+                        payment.getId(), "M2", updatedRequest
+                )
+        );
+    }
+
+    @Test
     void makerCheckerCannotRejectOwnPayment() {
 
         CreatePaymentRequest request = new CreatePaymentRequest();
@@ -522,6 +621,68 @@ class PaymentServiceTest {
                 BusinessException.class,
                 () -> paymentService.rejectPayment(
                         payment.getId(), "C2", rejectRequest
+                )
+        );
+    }
+
+    @Test
+    void makerCannotEditApprovedPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST140");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Approved payment edit validation");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        paymentService.approvePayment(payment.getId(), "C1");
+
+        CreatePaymentRequest updatedRequest = new CreatePaymentRequest();
+        updatedRequest.setBeneficiaryName("Updated Beneficiary");
+        updatedRequest.setBeneficiaryId("TEST141");
+        updatedRequest.setAmount(new BigDecimal("600000.00"));
+        updatedRequest.setPurpose("Updated purpose");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.editPayment(
+                        payment.getId(), "M1", updatedRequest
+                )
+        );
+    }
+
+    @Test
+    void makerCannotEditReleasedPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST150");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Released payment edit validation");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        paymentService.approvePayment(payment.getId(), "C1");
+
+        paymentService.releasePayment(payment.getId(), "A1");
+
+        CreatePaymentRequest updatedRequest = new CreatePaymentRequest();
+        updatedRequest.setBeneficiaryName("Updated Beneficiary");
+        updatedRequest.setBeneficiaryId("TEST151");
+        updatedRequest.setAmount(new BigDecimal("600000.00"));
+        updatedRequest.setPurpose("Updated purpose");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.editPayment(
+                        payment.getId(), "M1", updatedRequest
                 )
         );
     }

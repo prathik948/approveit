@@ -132,6 +132,90 @@ public class PaymentService {
     }
 
 
+    //Edit
+    @Transactional
+    public PaymentResponse editPayment(
+            Long paymentId,
+            String userId,
+            CreatePaymentRequest request) {
+
+        Payment payment = null;
+        String stateBefore = null;
+
+        try {
+
+            payment = paymentRepository.findById(paymentId)
+                    .orElseThrow(() ->
+                            new BusinessException("Payment not found"));
+
+            stateBefore = payment.getStatus().name();
+
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() ->
+                            new BusinessException("User not found"));
+
+            if (!user.getRoles().contains(Role.MAKER)) {
+                throw new BusinessException("Only a Maker can edit payments");
+            }
+
+            if (!payment.getMaker().getUserId().equals(userId)) {
+                throw new BusinessException(
+                        "Only the original Maker can edit this payment");
+            }
+
+            if (payment.getStatus() != PaymentStatus.DRAFT
+                    && payment.getStatus() != PaymentStatus.SUBMITTED) {
+                throw new BusinessException(
+                        "Payment cannot be edited in its current status");
+            }
+
+            if (payment.getStatus() == PaymentStatus.SUBMITTED) {
+
+                approvalRepository.deleteByPayment_Id(paymentId);
+
+                payment.setStatus(PaymentStatus.DRAFT);
+                payment.setSubmittedAt(null);
+            }
+
+            payment.setBeneficiaryName(request.getBeneficiaryName());
+            payment.setBeneficiaryId(request.getBeneficiaryId());
+            payment.setAmount(request.getAmount());
+            payment.setPurpose(request.getPurpose());
+
+            Payment updatedPayment = paymentRepository.save(payment);
+
+            // Record successful edit
+            auditLogService.logAction(
+                    userId,
+                    updatedPayment,
+                    "EDIT_PAYMENT",
+                    stateBefore,
+                    updatedPayment.getStatus().name(),
+                    "SUCCESS",
+                    "Payment updated successfully"
+            );
+
+            return new PaymentResponse(updatedPayment);
+
+        } catch (BusinessException ex) {
+
+            // Record failed edit
+            auditLogService.logAction(
+                    userId,
+                    payment != null ? payment.getId() : paymentId,
+                    "EDIT_PAYMENT",
+                    stateBefore,
+                    stateBefore,
+                    "FAILURE",
+                    ex.getMessage()
+            );
+
+            throw ex;
+        }
+    }
+
+
+
     //Submit
     @Transactional
     public PaymentResponse submitPayment(Long paymentId, String userId) {
