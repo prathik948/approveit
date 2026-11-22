@@ -434,6 +434,72 @@ public class PaymentService {
 
 
 
+    //Release
+    @Transactional
+    public PaymentResponse releasePayment(Long paymentId, String userId) {
+
+        Payment payment = null;
+        String stateBefore = null;
+
+        try {
+            // Find and lock payment
+            payment = paymentRepository.findByIdForUpdate(paymentId)
+                    .orElseThrow(() ->
+                            new BusinessException("Payment not found"));
+
+            stateBefore = payment.getStatus().name();
+
+            // Find Admin
+            User admin = userRepository.findById(userId)
+                    .orElseThrow(() ->
+                            new BusinessException("User not found"));
+
+            // Check Admin role
+            if (!admin.getRoles().contains(Role.ADMIN)) {
+                throw new BusinessException(
+                        "Only an Admin can release payments");
+            }
+
+            // Check payment status
+            if (payment.getStatus() != PaymentStatus.APPROVED) {
+                throw new BusinessException(
+                        "Only APPROVED payments can be released");
+            }
+
+            // Simulate payment release
+            payment.setStatus(PaymentStatus.RELEASED);
+
+            Payment releasedPayment = paymentRepository.save(payment);
+
+            // Record successful release
+            auditLogService.logAction(
+                    userId,
+                    releasedPayment,
+                    "RELEASE_PAYMENT",
+                    stateBefore,
+                    releasedPayment.getStatus().name(),
+                    "SUCCESS",
+                    "Payment released successfully"
+            );
+
+            return new PaymentResponse(releasedPayment);
+
+        } catch (BusinessException ex) {
+
+            // Record failed release attempt
+            auditLogService.logAction(
+                    userId,
+                    payment != null ? payment.getId() : paymentId,
+                    "RELEASE_PAYMENT",
+                    stateBefore,
+                    stateBefore,
+                    "FAILURE",
+                    ex.getMessage()
+            );
+
+            throw ex;
+        }
+    }
 
 }
 

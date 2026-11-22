@@ -216,6 +216,56 @@ class PaymentServiceTest {
     }
 
     @Test
+    void adminCanReleaseApprovedPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST008");
+        request.setAmount(new BigDecimal("25000.00"));
+        request.setPurpose("Admin release test");
+
+        Payment payment = paymentService.createPayment("M2", request);
+
+        Long paymentId = payment.getId();
+
+        paymentService.submitPayment(paymentId, "M2");
+
+        paymentService.approvePayment(paymentId, "C1");
+
+        paymentService.releasePayment(paymentId, "A1");
+
+        PaymentResponse releasedPayment =
+                paymentService.getPaymentById(paymentId);
+
+        assertEquals(PaymentStatus.RELEASED, releasedPayment.getStatus());
+    }
+
+    @Test
+    void checkerCannotReleasePayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST009");
+        request.setAmount(new BigDecimal("25000.00"));
+        request.setPurpose("Unauthorized release test");
+
+        Payment payment = paymentService.createPayment("M2", request);
+
+        Long paymentId = payment.getId();
+
+        paymentService.submitPayment(paymentId, "M2");
+
+        paymentService.approvePayment(paymentId, "C1");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.releasePayment(paymentId, "C1")
+        );
+    }
+
+    @Test
     void makerCannotExceedDailySubmissionLimit() {
 
         CreatePaymentRequest firstRequest = new CreatePaymentRequest();
@@ -305,6 +355,28 @@ class PaymentServiceTest {
                 BusinessException.class,
                 () -> paymentService.rejectPayment(
                         payment.getId(), "MC1", rejectRequest
+                )
+        );
+    }
+
+    @Test
+    void adminCannotReleasePaymentBeforeApproval() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST070");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Release validation test");
+
+        Payment payment =
+                paymentService.createPayment("M2", request);
+
+        paymentService.submitPayment(payment.getId(), "M2");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.releasePayment(
+                        payment.getId(), "A1"
                 )
         );
     }
@@ -426,6 +498,35 @@ class PaymentServiceTest {
         );
     }
     @Test
+    void checkerCannotRejectReleasedPayment() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST130");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Released payment validation");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        paymentService.approvePayment(payment.getId(), "C1");
+
+        paymentService.releasePayment(payment.getId(), "A1");
+
+        RejectPaymentRequest rejectRequest = new RejectPaymentRequest();
+        rejectRequest.setReason("Trying to reject released payment");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.rejectPayment(
+                        payment.getId(), "C2", rejectRequest
+                )
+        );
+    }
+
+    @Test
     void makerCannotSubmitPaymentTwice() {
 
         CreatePaymentRequest request = new CreatePaymentRequest();
@@ -446,4 +547,30 @@ class PaymentServiceTest {
                 )
         );
     }
+    @Test
+    void adminCannotReleasePaymentTwice() {
+
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setBeneficiaryName("Test Beneficiary");
+        request.setBeneficiaryId("TEST170");
+        request.setAmount(new BigDecimal("500000.00"));
+        request.setPurpose("Duplicate release test");
+
+        Payment payment =
+                paymentService.createPayment("M1", request);
+
+        paymentService.submitPayment(payment.getId(), "M1");
+
+        paymentService.approvePayment(payment.getId(), "C1");
+
+        paymentService.releasePayment(payment.getId(), "A1");
+
+        assertThrows(
+                BusinessException.class,
+                () -> paymentService.releasePayment(
+                        payment.getId(), "A1"
+                )
+        );
+    }
+
 }

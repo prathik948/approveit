@@ -94,6 +94,18 @@ public class PaymentController {
 
 
 
+    @PutMapping("/{id}/release")
+    public ResponseEntity<PaymentResponse> releasePayment(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Id") String userId) {
+
+        PaymentResponse releasedPayment =
+                paymentService.releasePayment(id, userId);
+
+        return ResponseEntity.ok(releasedPayment);
+    }
+
+
 
 
 }
